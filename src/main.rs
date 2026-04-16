@@ -18,7 +18,7 @@ fn main() {
     }
 
     let path = std::path::Path::new(&args[1]);
-    let (_file, info) = match nctui::backend::open_dataset(path) {
+    let (file, info) = match nctui::backend::open_dataset(path) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("error: {e}");
@@ -30,6 +30,12 @@ fn main() {
     println!("nctui v{}", env!("CARGO_PKG_VERSION"));
     println!("File: {}", path.display());
     println!("Groups: {}", info.groups.len());
+    if !info.coord_vars.is_empty() {
+        println!(
+            "Coordinate variables: {}",
+            info.coord_vars.keys().cloned().collect::<Vec<_>>().join(", ")
+        );
+    }
     for (gname, vars) in &info.groups {
         println!("  {gname}/ ({} variables)", vars.len());
         for vname in vars {
@@ -40,7 +46,12 @@ fn main() {
                     .zip(&meta.dim_sizes)
                     .map(|(n, s)| format!("{n}={s}"))
                     .collect();
-                println!("    {vname}  [{}]", dims.join(", "));
+                let coord_marker = if info.coord_vars.contains_key(vname) {
+                    " (coord)"
+                } else {
+                    ""
+                };
+                println!("    {vname}  [{}]{coord_marker}", dims.join(", "));
             }
         }
     }

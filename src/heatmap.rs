@@ -7,10 +7,18 @@ use ratatui::{
 };
 
 /// A 2D heatmap panel rendering data with Unicode block characters.
+///
+/// Supports coordinate-aware axes: when `row_coords` / `col_coords` are
+/// provided the axis labels show real coordinate values instead of plain
+/// indices.
 pub struct HeatmapPanel {
     pub data: Vec<Vec<f64>>,
     pub row_labels: Vec<String>,
     pub col_labels: Vec<String>,
+    /// Optional real coordinate values along the row (Y) axis.
+    pub row_coords: Option<Vec<f64>>,
+    /// Optional real coordinate values along the column (X) axis.
+    pub col_coords: Option<Vec<f64>>,
     pub title: String,
     pub vmin: f64,
     pub vmax: f64,
@@ -30,6 +38,47 @@ impl HeatmapPanel {
             data,
             row_labels,
             col_labels,
+            row_coords: None,
+            col_coords: None,
+            title: title.to_string(),
+            vmin,
+            vmax,
+        }
+    }
+
+    /// Create a heatmap with real coordinate values for axes.
+    ///
+    /// When coordinates are supplied the axis labels display the coordinate
+    /// range (e.g. "-90.0 … 90.0") rather than index range ("0 … 179").
+    pub fn with_coords(
+        data: Vec<Vec<f64>>,
+        title: &str,
+        row_coords: Option<Vec<f64>>,
+        col_coords: Option<Vec<f64>>,
+    ) -> Self {
+        let (vmin, vmax) = data_range(&data);
+        let nrows = data.len();
+        let ncols = data.first().map_or(0, |r| r.len());
+
+        let row_labels: Vec<String> = match &row_coords {
+            Some(coords) if coords.len() == nrows => {
+                coords.iter().map(|v| format_coord(*v)).collect()
+            }
+            _ => (0..nrows).map(|i| format!("{i}")).collect(),
+        };
+        let col_labels: Vec<String> = match &col_coords {
+            Some(coords) if coords.len() == ncols => {
+                coords.iter().map(|v| format_coord(*v)).collect()
+            }
+            _ => (0..ncols).map(|i| format!("{i}")).collect(),
+        };
+
+        Self {
+            data,
+            row_labels,
+            col_labels,
+            row_coords,
+            col_coords,
             title: title.to_string(),
             vmin,
             vmax,
@@ -159,13 +208,13 @@ impl HeatmapPanel {
             }
         }
 
-        // X-axis label
+        // X-axis label — use coordinate values when available
         if inner.height > 1 {
             let xlabel = if self.col_labels.is_empty() {
                 String::new()
             } else {
                 format!(
-                    "{} ... {}",
+                    "{} \u{2026} {}",
                     self.col_labels.first().unwrap(),
                     self.col_labels.last().unwrap()
                 )
@@ -192,6 +241,16 @@ fn data_range(data: &[Vec<f64>]) -> (f64, f64) {
         (0.0, 1.0)
     } else {
         (vmin, vmax)
+    }
+}
+
+/// Format a coordinate value: use integer format for whole numbers, 1 decimal
+/// otherwise, to keep axis labels compact.
+fn format_coord(v: f64) -> String {
+    if v.is_finite() && v == v.trunc() && v.abs() < 1e9 {
+        format!("{}", v as i64)
+    } else {
+        format!("{:.1}", v)
     }
 }
 
@@ -229,5 +288,47 @@ mod tests {
         assert_eq!(hm.value_block(0.0), BLOCKS[0]);
         assert_eq!(hm.value_block(1.0), BLOCKS[3]);
         assert_eq!(hm.value_block(f64::NAN), ' ');
+    }
+
+    #[test]
+    fn test_with_coords_labels() {
+        let data = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
+        let row_coords = vec![-90.0, 90.0];
+        let col_coords = vec![0.0, 180.0, 360.0];
+        let hm = HeatmapPanel::with_coords(
+            data,
+            "test",
+            Some(row_coords),
+            Some(col_coords),
+        );
+        assert_eq!(hm.row_labels, vec!["-90", "90"]);
+        assert_eq!(hm.col_labels, vec!["0", "180", "360"]);
+    }
+
+    #[test]
+    fn test_with_coords_fractional() {
+        let data = vec![vec![1.0, 2.0]];
+        let col_coords = vec![0.5, 1.5];
+        let hm = HeatmapPanel::with_coords(data, "t", None, Some(col_coords));
+        assert_eq!(hm.col_labels, vec!["0.5", "1.5"]);
+        // row_labels fall back to indices when no row_coords
+        assert_eq!(hm.row_labels, vec!["0"]);
+    }
+
+    #[test]
+    fn test_with_coords_mismatched_len() {
+        let data = vec![vec![1.0, 2.0, 3.0]];
+        // wrong length — should fall back to indices
+        let col_coords = vec![0.0, 1.0];
+        let hm = HeatmapPanel::with_coords(data, "t", None, Some(col_coords));
+        assert_eq!(hm.col_labels, vec!["0", "1", "2"]);
+    }
+
+    #[test]
+    fn test_format_coord() {
+        assert_eq!(format_coord(42.0), "42");
+        assert_eq!(format_coord(-90.0), "-90");
+        assert_eq!(format_coord(1.5), "1.5");
+        assert_eq!(format_coord(f64::NAN), "NaN");
     }
 }

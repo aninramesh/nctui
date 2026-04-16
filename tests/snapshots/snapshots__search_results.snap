@@ -1,0 +1,12 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_string(&buf)
+---
+┌ Results (3) ───────────────────────────────────┐
+│temperature  [lat=180, lon=360, time=12]        │
+│pressure  [lat=180, lon=360]                    │
+│lat  [lat=180]                                  │
+│                                                │
+│                                                │
+│                                                │
+└────────────────────────────────────────────────┘

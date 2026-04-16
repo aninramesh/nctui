@@ -6,8 +6,12 @@ Terminal UI viewer for NetCDF4 / HDF5 datasets, built with Rust and [ratatui](ht
 
 - **Tree navigator** -- browse groups and variables with expand/collapse; coordinate variables are auto-detected and marked
 - **2D heatmap** -- color-mapped visualization using Unicode block characters (░▒▓█) with a blue-to-red palette and automatic downsampling
+- **Coordinate-aware axes** -- plots display real coordinate values (e.g. latitude/longitude) when coordinate variables are available, instead of raw indices
+- **Stats panel** -- summary statistics including count, min/max, mean, median, standard deviation, percentiles (p5/p25/p75/p95), NaN/Inf counts, and valid-data fraction
+- **Table preview** -- inspect exact numeric values for 1D variables or small 2D slices in a scrollable table overlay
 - **Histogram overlay** -- equal-width bin distribution plot with adjustable bin count (4--80)
 - **Dimension slicer** -- interactively pick a 2D slice from an nD variable by assigning X/Y axes and stepping through fixed dimensions
+- **Search & filter** -- fuzzy variable name matching, group/dimension name search, and metadata filters (dimension name, dimensionality)
 - **NetCDF/HDF5 backend** -- reads real NetCDF4 and HDF5 files via the [netcdf](https://crates.io/crates/netcdf) crate; the C libraries can be bundled from source for a fully self-contained static binary
 
 All rendering is terminal-native -- no GPU, no graphics protocol, just Unicode and ANSI colors.
@@ -76,8 +80,8 @@ Pre-built static Linux binaries (x86_64 and aarch64) with bundled
 NetCDF/HDF5 are published automatically when a version tag is pushed:
 
 ```
-git tag v0.6.0
-git push origin v0.6.0
+git tag v0.7.0
+git push origin v0.7.0
 ```
 
 The [Release workflow](.github/workflows/release.yml) builds both architectures
@@ -93,13 +97,17 @@ nctui <file.nc>
 
 ## Tests
 
-The test suite includes per-module unit tests and 16 snapshot tests (via [insta](https://insta.rs/)) that render each widget into a buffer and compare against golden files.
+The test suite includes per-module unit tests and snapshot tests (via [insta](https://insta.rs/)) that render each widget into a buffer and compare against golden files.
 
 ```
 cargo test                   # run all tests (needs libnetcdf-dev)
 cargo test --no-default-features   # run TUI widget tests only
 cargo insta test --review    # review snapshot changes after code edits
 ```
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License
 

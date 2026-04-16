@@ -1,0 +1,7 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_string(&buf)
+---
+┌ Search ──────────────────────────────┐
+│                                      │
+└──────────────────────────────────────┘

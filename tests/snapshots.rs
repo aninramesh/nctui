@@ -12,8 +12,11 @@ use ratatui::{buffer::Buffer, layout::Rect};
 
 use nctui::heatmap::HeatmapPanel;
 use nctui::histogram::{Histogram, HistogramState};
+use nctui::search::{SearchState, VarInfo};
 use nctui::slice_picker::{SlicePicker, SliceSpec};
-use nctui::tree::{TreeNavigator};
+use nctui::stats::StatsPanel;
+use nctui::table_preview::TablePreview;
+use nctui::tree::TreeNavigator;
 
 /// Render a buffer to a trimmed string for snapshot comparison.
 /// Each line has trailing whitespace removed to avoid brittle diffs.
@@ -74,6 +77,39 @@ fn make_heatmap_data(rows: usize, cols: usize) -> Vec<Vec<f64>> {
                 .collect()
         })
         .collect()
+}
+
+fn sample_catalog() -> Vec<VarInfo> {
+    vec![
+        VarInfo {
+            name: "temperature".into(),
+            group: "atmosphere".into(),
+            dim_names: vec!["lat".into(), "lon".into(), "time".into()],
+            dim_sizes: vec![180, 360, 12],
+            is_coord: false,
+        },
+        VarInfo {
+            name: "pressure".into(),
+            group: "atmosphere".into(),
+            dim_names: vec!["lat".into(), "lon".into()],
+            dim_sizes: vec![180, 360],
+            is_coord: false,
+        },
+        VarInfo {
+            name: "lat".into(),
+            group: "atmosphere".into(),
+            dim_names: vec!["lat".into()],
+            dim_sizes: vec![180],
+            is_coord: true,
+        },
+        VarInfo {
+            name: "salinity".into(),
+            group: "ocean".into(),
+            dim_names: vec!["depth".into()],
+            dim_sizes: vec![50],
+            is_coord: false,
+        },
+    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -220,6 +256,23 @@ fn snapshot_heatmap_uniform_data() {
     insta::assert_snapshot!("heatmap_uniform", buffer_to_string(&buf));
 }
 
+#[test]
+fn snapshot_heatmap_with_coords() {
+    let data = make_heatmap_data(4, 6);
+    let row_coords = vec![-90.0, -30.0, 30.0, 90.0];
+    let col_coords = vec![0.0, 60.0, 120.0, 180.0, 240.0, 300.0];
+    let panel = HeatmapPanel::with_coords(
+        data,
+        "SST (coords)",
+        Some(row_coords),
+        Some(col_coords),
+    );
+    let area = Rect::new(0, 0, 30, 10);
+    let mut buf = Buffer::empty(area);
+    panel.render(area, &mut buf);
+    insta::assert_snapshot!("heatmap_with_coords", buffer_to_string(&buf));
+}
+
 // ---------------------------------------------------------------------------
 // Histogram Snapshots
 // ---------------------------------------------------------------------------
@@ -272,4 +325,118 @@ fn snapshot_histogram_hidden() {
     // Should be empty — all spaces trimmed
     let output = buffer_to_string(&buf);
     insta::assert_snapshot!("histogram_hidden", output);
+}
+
+// ---------------------------------------------------------------------------
+// Stats Panel Snapshots
+// ---------------------------------------------------------------------------
+
+#[test]
+fn snapshot_stats_panel_basic() {
+    let mut panel = StatsPanel::new();
+    let data: Vec<f64> = (0..100).map(|i| i as f64).collect();
+    panel.set_data("temperature", &data);
+    let area = Rect::new(0, 0, 30, 20);
+    let mut buf = Buffer::empty(area);
+    panel.render(area, &mut buf);
+    insta::assert_snapshot!("stats_panel_basic", buffer_to_string(&buf));
+}
+
+#[test]
+fn snapshot_stats_panel_with_nan() {
+    let mut panel = StatsPanel::new();
+    let mut data: Vec<f64> = (0..50).map(|i| i as f64).collect();
+    data.extend(vec![f64::NAN; 10]);
+    panel.set_data("pressure", &data);
+    let area = Rect::new(0, 0, 30, 20);
+    let mut buf = Buffer::empty(area);
+    panel.render(area, &mut buf);
+    insta::assert_snapshot!("stats_panel_with_nan", buffer_to_string(&buf));
+}
+
+#[test]
+fn snapshot_stats_panel_empty() {
+    let panel = StatsPanel::new();
+    let area = Rect::new(0, 0, 30, 6);
+    let mut buf = Buffer::empty(area);
+    panel.render(area, &mut buf);
+    insta::assert_snapshot!("stats_panel_empty", buffer_to_string(&buf));
+}
+
+// ---------------------------------------------------------------------------
+// Table Preview Snapshots
+// ---------------------------------------------------------------------------
+
+#[test]
+fn snapshot_table_1d() {
+    let data = vec![10.0, 20.5, 30.0, f64::NAN, 50.0];
+    let tp = TablePreview::from_1d(&data, "lat", "lat", None);
+    let area = Rect::new(0, 0, 40, 14);
+    let mut buf = Buffer::empty(area);
+    tp.render(area, &mut buf);
+    insta::assert_snapshot!("table_preview_1d", buffer_to_string(&buf));
+}
+
+#[test]
+fn snapshot_table_2d() {
+    let data = vec![
+        vec![1.0, 2.0, 3.0],
+        vec![4.0, 5.0, 6.0],
+    ];
+    let tp = TablePreview::from_2d(&data, "sst", "lat", "lon", None, None);
+    let area = Rect::new(0, 0, 60, 14);
+    let mut buf = Buffer::empty(area);
+    tp.render(area, &mut buf);
+    insta::assert_snapshot!("table_preview_2d", buffer_to_string(&buf));
+}
+
+#[test]
+fn snapshot_table_with_coords() {
+    let data = vec![100.0, 200.0, 300.0];
+    let coords = vec![-90.0, 0.0, 90.0];
+    let tp = TablePreview::from_1d(&data, "temperature", "lat", Some(&coords));
+    let area = Rect::new(0, 0, 40, 14);
+    let mut buf = Buffer::empty(area);
+    tp.render(area, &mut buf);
+    insta::assert_snapshot!("table_preview_with_coords", buffer_to_string(&buf));
+}
+
+// ---------------------------------------------------------------------------
+// Search Bar Snapshots
+// ---------------------------------------------------------------------------
+
+#[test]
+fn snapshot_search_bar_inactive() {
+    let ss = SearchState::new();
+    let area = Rect::new(0, 0, 40, 3);
+    let mut buf = Buffer::empty(area);
+    ss.render_bar(area, &mut buf);
+    insta::assert_snapshot!("search_bar_inactive", buffer_to_string(&buf));
+}
+
+#[test]
+fn snapshot_search_bar_active_with_query() {
+    let mut ss = SearchState::new();
+    ss.set_catalog(sample_catalog());
+    ss.active = true;
+    for ch in "temp".chars() {
+        ss.push_char(ch);
+    }
+    let area = Rect::new(0, 0, 40, 3);
+    let mut buf = Buffer::empty(area);
+    ss.render_bar(area, &mut buf);
+    insta::assert_snapshot!("search_bar_active_query", buffer_to_string(&buf));
+}
+
+#[test]
+fn snapshot_search_results() {
+    let mut ss = SearchState::new();
+    ss.set_catalog(sample_catalog());
+    for ch in "lat".chars() {
+        ss.push_char(ch);
+    }
+    let area = Rect::new(0, 0, 50, 8);
+    let mut buf = Buffer::empty(area);
+    ss.render_results(area, &mut buf);
+    insta::assert_snapshot!("search_results", buffer_to_string(&buf));
 }

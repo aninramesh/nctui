@@ -24,6 +24,10 @@ pub struct DatasetInfo {
     pub variables: IndexMap<String, Vec<String>>,
     /// Variable name → full metadata (dims + sizes).
     pub var_meta: IndexMap<String, VarMeta>,
+    /// Coordinate variables: dimension name → variable name.
+    /// A variable is a coordinate variable when it is 1D and its single
+    /// dimension name matches its own name (CF convention).
+    pub coord_vars: IndexMap<String, String>,
 }
 
 /// Open a NetCDF / HDF5 file and collect its structure.
@@ -33,6 +37,7 @@ pub fn open_dataset(path: &Path) -> Result<(netcdf::File, DatasetInfo), String> 
     let mut groups: IndexMap<String, Vec<String>> = IndexMap::new();
     let mut variables: IndexMap<String, Vec<String>> = IndexMap::new();
     let mut var_meta: IndexMap<String, VarMeta> = IndexMap::new();
+    let mut coord_vars: IndexMap<String, String> = IndexMap::new();
 
     // Collect root-level variables into a synthetic "/" group.
     let root_vars: Vec<String> = file.variables().map(|v| v.name()).collect();
@@ -42,6 +47,10 @@ pub fn open_dataset(path: &Path) -> Result<(netcdf::File, DatasetInfo), String> 
             let name = v.name();
             let dim_names: Vec<String> = v.dimensions().iter().map(|d| d.name()).collect();
             let dim_sizes: Vec<usize> = v.dimensions().iter().map(|d| d.len()).collect();
+            // Detect coordinate variables
+            if dim_names.len() == 1 && dim_names[0] == name {
+                coord_vars.insert(name.clone(), name.clone());
+            }
             variables.insert(name.clone(), dim_names.clone());
             var_meta.insert(
                 name.clone(),
@@ -67,6 +76,9 @@ pub fn open_dataset(path: &Path) -> Result<(netcdf::File, DatasetInfo), String> 
                 let dim_names: Vec<String> =
                     v.dimensions().iter().map(|d| d.name()).collect();
                 let dim_sizes: Vec<usize> = v.dimensions().iter().map(|d| d.len()).collect();
+                if dim_names.len() == 1 && dim_names[0] == name {
+                    coord_vars.insert(name.clone(), name.clone());
+                }
                 variables.insert(name.clone(), dim_names.clone());
                 var_meta.insert(
                     name.clone(),
@@ -84,6 +96,7 @@ pub fn open_dataset(path: &Path) -> Result<(netcdf::File, DatasetInfo), String> 
         groups,
         variables,
         var_meta,
+        coord_vars,
     };
     Ok((file, info))
 }
@@ -116,6 +129,35 @@ pub fn read_var_f64(file: &netcdf::File, var_path: &str) -> Result<Vec<f64>, Str
             .ok_or_else(|| format!("variable '{vname}' not found at root"))?;
         read_variable_data(&var)
     }
+}
+
+/// Read coordinate data for a dimension if a matching coordinate variable
+/// exists. Returns `None` if no coordinate variable is found.
+pub fn read_coord_var(
+    file: &netcdf::File,
+    dim_name: &str,
+    info: &DatasetInfo,
+) -> Option<Vec<f64>> {
+    if !info.coord_vars.contains_key(dim_name) {
+        return None;
+    }
+    // Try reading from root first, then from groups
+    if let Some(_meta) = info.var_meta.get(dim_name) {
+        // Build the path: check if it's in root or a group
+        for (gname, gvars) in &info.groups {
+            if gvars.contains(&dim_name.to_string()) {
+                let path = if gname == "/" {
+                    format!("/{dim_name}")
+                } else {
+                    format!("/{gname}/{dim_name}")
+                };
+                if let Ok(data) = read_var_f64(file, &path) {
+                    return Some(data);
+                }
+            }
+        }
+    }
+    None
 }
 
 fn read_variable_data(var: &netcdf::Variable) -> Result<Vec<f64>, String> {
