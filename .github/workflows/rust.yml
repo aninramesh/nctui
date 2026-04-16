@@ -50,6 +50,11 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y musl-tools cmake g++ m4
     - name: Build static binary with bundled NetCDF/HDF5
       run: cargo build --release --target x86_64-unknown-linux-musl --features static
+      env:
+        # The cmake crate looks for x86_64-linux-musl-g++ which doesn't
+        # exist in musl-tools. Point the C++ compiler at the system g++
+        # since netcdf-c/hdf5 are C libraries (cmake still checks CXX).
+        CXX: g++
     - name: Verify static linking
       run: |
         file target/x86_64-unknown-linux-musl/release/nctui

@@ -27,6 +27,13 @@ set -euo pipefail
 build_target() {
     local triple="$1"
     echo "--- Building static binary for ${triple} (with bundled NetCDF/HDF5) ---"
+    # The cmake crate looks for <triple>-g++ which doesn't exist in musl-tools.
+    # Export CXX to point cmake at the correct C++ compiler.
+    if [[ "${triple}" == "aarch64"* ]]; then
+        export CXX="aarch64-linux-gnu-g++"
+    else
+        export CXX="g++"
+    fi
     cargo build --release --target "${triple}" --features static
 
     local bin="target/${triple}/release/nctui"

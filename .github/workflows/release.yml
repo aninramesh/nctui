@@ -62,7 +62,9 @@ jobs:
       - name: Build static release binary with bundled NetCDF/HDF5
         run: cargo build --release --target ${{ matrix.target }} --features static
         env:
-          # For aarch64 cross-builds, tell cmake/cc-rs which compilers to use.
+          # The cmake crate looks for <triple>-g++ which doesn't exist in
+          # musl-tools. Point cmake at the correct C++ compiler.
+          CXX: ${{ matrix.target == 'aarch64-unknown-linux-musl' && 'aarch64-linux-gnu-g++' || 'g++' }}
           CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
           CXX_aarch64_unknown_linux_musl: aarch64-linux-gnu-g++
 
