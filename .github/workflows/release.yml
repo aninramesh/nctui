@@ -13,18 +13,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-static:
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-musl
-            runner: ubuntu-latest
-            asset_name: nctui-linux-x86_64
-          - target: aarch64-unknown-linux-musl
-            runner: ubuntu-latest
-            asset_name: nctui-linux-aarch64
-
-    runs-on: ${{ matrix.runner }}
+  build-x86_64:
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -32,12 +22,11 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: x86_64-unknown-linux-musl
 
       # cmake + C/C++ compiler are required by netcdf-src and hdf5-src to
       # compile the vendored C libraries from source (--features static).
-      - name: Install build tools and musl (x86_64)
-        if: matrix.target == 'x86_64-unknown-linux-musl'
+      - name: Install build tools and musl
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools cmake g++ m4
@@ -45,8 +34,50 @@ jobs:
           # probes for CXX even for C-only libs. Create a symlink.
           sudo ln -sf /usr/bin/x86_64-linux-musl-gcc /usr/local/bin/x86_64-linux-musl-g++
 
-      - name: Install cross-compilation tools (aarch64)
-        if: matrix.target == 'aarch64-unknown-linux-musl'
+      - name: Build static release binary with bundled NetCDF/HDF5
+        run: cargo build --release --target x86_64-unknown-linux-musl --features static
+
+      - name: Verify static linking
+        run: |
+          FILE_OUTPUT=$(file target/x86_64-unknown-linux-musl/release/nctui)
+          echo "$FILE_OUTPUT"
+          # Accept both classic static binaries and valid static PIE binaries.
+          echo "$FILE_OUTPUT" | grep -Eq "statically linked|static-pie linked"
+
+      - name: Report binary size
+        run: |
+          BIN="target/x86_64-unknown-linux-musl/release/nctui"
+          ls -la "$BIN"
+          echo "Uncompressed: $(stat --printf='%s' "$BIN") bytes"
+
+      - name: Package binary
+        run: |
+          cd target/x86_64-unknown-linux-musl/release
+          tar czf ../../../nctui-linux-x86_64.tar.gz nctui
+          cd ../../..
+          sha256sum nctui-linux-x86_64.tar.gz > nctui-linux-x86_64.tar.gz.sha256
+          echo "Compressed: $(stat --printf='%s' nctui-linux-x86_64.tar.gz) bytes"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nctui-linux-x86_64
+          path: |
+            nctui-linux-x86_64.tar.gz
+            nctui-linux-x86_64.tar.gz.sha256
+
+  build-aarch64:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-musl
+
+      - name: Install cross-compilation tools
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu musl-tools cmake m4
@@ -62,43 +93,38 @@ jobs:
           CXX_aarch64_unknown_linux_musl: aarch64-linux-gnu-g++
 
       - name: Build static release binary with bundled NetCDF/HDF5
-        run: cargo build --release --target ${{ matrix.target }} --features static
+        run: cargo build --release --target aarch64-unknown-linux-musl --features static
         env:
           CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
           CXX_aarch64_unknown_linux_musl: aarch64-linux-gnu-g++
 
-      - name: Verify static linking
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: |
-          FILE_OUTPUT=$(file target/${{ matrix.target }}/release/nctui)
-          echo "$FILE_OUTPUT"
-          # Accept both classic static binaries and valid static PIE binaries.
-          echo "$FILE_OUTPUT" | grep -Eq "statically linked|static-pie linked"
-
       - name: Report binary size
         run: |
-          BIN="target/${{ matrix.target }}/release/nctui"
+          BIN="target/aarch64-unknown-linux-musl/release/nctui"
           ls -la "$BIN"
           echo "Uncompressed: $(stat --printf='%s' "$BIN") bytes"
 
       - name: Package binary
         run: |
-          cd target/${{ matrix.target }}/release
-          tar czf ../../../${{ matrix.asset_name }}.tar.gz nctui
+          cd target/aarch64-unknown-linux-musl/release
+          tar czf ../../../nctui-linux-aarch64.tar.gz nctui
           cd ../../..
-          sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
-          echo "Compressed: $(stat --printf='%s' ${{ matrix.asset_name }}.tar.gz) bytes"
+          sha256sum nctui-linux-aarch64.tar.gz > nctui-linux-aarch64.tar.gz.sha256
+          echo "Compressed: $(stat --printf='%s' nctui-linux-aarch64.tar.gz) bytes"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset_name }}
+          name: nctui-linux-aarch64
           path: |
-            ${{ matrix.asset_name }}.tar.gz
-            ${{ matrix.asset_name }}.tar.gz.sha256
+            nctui-linux-aarch64.tar.gz
+            nctui-linux-aarch64.tar.gz.sha256
 
   release:
-    needs: build-static
+    # Run after both build jobs finish (regardless of outcome).
+    # The job itself only requires x86_64 to have succeeded.
+    needs: [build-x86_64, build-aarch64]
+    if: always() && needs.build-x86_64.result == 'success'
     runs-on: ubuntu-latest
 
     steps:
@@ -109,6 +135,10 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Warn if aarch64 build failed
+        if: needs.build-aarch64.result != 'success'
+        run: echo "::warning::aarch64 build did not succeed (status: ${{ needs.build-aarch64.result }}). Only x86_64 binary will be published."
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
