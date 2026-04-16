@@ -57,9 +57,10 @@ jobs:
       - name: Verify static linking
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: |
-          file target/${{ matrix.target }}/release/nctui
-          # Confirm the binary is statically linked
-          file target/${{ matrix.target }}/release/nctui | grep -q "statically linked"
+          FILE_OUTPUT=$(file target/${{ matrix.target }}/release/nctui)
+          echo "$FILE_OUTPUT"
+          # Accept both classic static binaries and valid static PIE binaries.
+          echo "$FILE_OUTPUT" | grep -Eq "statically linked|static-pie linked"
 
       - name: Package binary
         run: |
