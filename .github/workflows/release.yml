@@ -68,6 +68,7 @@ jobs:
 
   build-aarch64:
     runs-on: ubuntu-latest
+    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
@@ -113,6 +114,7 @@ jobs:
           echo "Compressed: $(stat --printf='%s' nctui-linux-aarch64.tar.gz) bytes"
 
       - name: Upload artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: nctui-linux-aarch64
@@ -121,8 +123,6 @@ jobs:
             nctui-linux-aarch64.tar.gz.sha256
 
   release:
-    # Run after both build jobs finish (regardless of outcome).
-    # The job itself only requires x86_64 to have succeeded.
     needs: [build-x86_64, build-aarch64]
     if: always() && needs.build-x86_64.result == 'success'
     runs-on: ubuntu-latest
@@ -130,7 +130,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      - name: Download available artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -138,7 +138,8 @@ jobs:
 
       - name: Warn if aarch64 build failed
         if: needs.build-aarch64.result != 'success'
-        run: echo "::warning::aarch64 build did not succeed (status: ${{ needs.build-aarch64.result }}). Only x86_64 binary will be published."
+        run: |
+          echo "::warning::aarch64 build did not succeed (status: ${{ needs.build-aarch64.result }}). Only x86_64 binary will be published."
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
