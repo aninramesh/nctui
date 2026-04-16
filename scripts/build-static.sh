@@ -27,12 +27,11 @@ set -euo pipefail
 build_target() {
     local triple="$1"
     echo "--- Building static binary for ${triple} (with bundled NetCDF/HDF5) ---"
-    # The cmake crate looks for <triple>-g++ which doesn't exist in musl-tools.
-    # Export CXX to point cmake at the correct C++ compiler.
-    if [[ "${triple}" == "aarch64"* ]]; then
-        export CXX="aarch64-linux-gnu-g++"
-    else
-        export CXX="g++"
+    # musl-tools provides musl-gcc but no g++ wrapper. cmake probes for CXX
+    # even for C-only libs. Ensure a g++ wrapper exists for the target.
+    if [[ "${triple}" == "x86_64"*"musl"* ]] && ! command -v x86_64-linux-musl-g++ &>/dev/null; then
+        echo "Creating x86_64-linux-musl-g++ symlink..."
+        sudo ln -sf /usr/bin/x86_64-linux-musl-gcc /usr/local/bin/x86_64-linux-musl-g++ 2>/dev/null || true
     fi
     cargo build --release --target "${triple}" --features static
 

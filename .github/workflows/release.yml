@@ -41,14 +41,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools cmake g++ m4
+          # musl-tools provides musl-gcc but no g++ wrapper. cmake still
+          # probes for CXX even for C-only libs. Create a symlink.
+          sudo ln -sf /usr/bin/x86_64-linux-musl-gcc /usr/local/bin/x86_64-linux-musl-g++
 
       - name: Install cross-compilation tools (aarch64)
         if: matrix.target == 'aarch64-unknown-linux-musl'
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu musl-tools cmake m4
-          # Point cargo at the aarch64 cross-linker and set C/C++ compilers
-          # so that cmake picks up the cross toolchain for libnetcdf/libhdf5.
+          # Point cargo at the aarch64 cross-linker.
           mkdir -p .cargo
           cat >> .cargo/config.toml <<'EOF'
           [target.aarch64-unknown-linux-musl]
@@ -62,9 +64,6 @@ jobs:
       - name: Build static release binary with bundled NetCDF/HDF5
         run: cargo build --release --target ${{ matrix.target }} --features static
         env:
-          # The cmake crate looks for <triple>-g++ which doesn't exist in
-          # musl-tools. Point cmake at the correct C++ compiler.
-          CXX: ${{ matrix.target == 'aarch64-unknown-linux-musl' && 'aarch64-linux-gnu-g++' || 'g++' }}
           CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
           CXX_aarch64_unknown_linux_musl: aarch64-linux-gnu-g++
 
