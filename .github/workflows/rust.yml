@@ -10,16 +10,33 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Build with the default feature set (netcdf-backend, linking to system
+  # libnetcdf). Falls back to the TUI-only widget tests when system libs
+  # are not available.
   build:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build
+    - name: Install NetCDF development libraries
+      run: sudo apt-get update && sudo apt-get install -y libnetcdf-dev libhdf5-dev
+    - name: Build (with netcdf backend)
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
 
+  # Verify the TUI-only library builds without the netcdf dependency.
+  build-tui-only:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build (TUI-only, no netcdf)
+      run: cargo build --verbose --no-default-features
+    - name: Run tests (TUI-only)
+      run: cargo test --verbose --no-default-features
+
+  # Full static build with bundled NetCDF/HDF5 compiled from source.
   static-check:
     runs-on: ubuntu-latest
 
@@ -29,11 +46,15 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: x86_64-unknown-linux-musl
-    - name: Install musl tools
-      run: sudo apt-get update && sudo apt-get install -y musl-tools
-    - name: Build static binary (x86_64-musl)
-      run: cargo build --release --target x86_64-unknown-linux-musl
+    - name: Install musl + cmake + C++ compiler
+      run: sudo apt-get update && sudo apt-get install -y musl-tools cmake g++ m4
+    - name: Build static binary with bundled NetCDF/HDF5
+      run: cargo build --release --target x86_64-unknown-linux-musl --features static
     - name: Verify static linking
       run: |
         file target/x86_64-unknown-linux-musl/release/nctui
-        file target/x86_64-unknown-linux-musl/release/nctui | grep -q "statically linked"
+        file target/x86_64-unknown-linux-musl/release/nctui | grep -Eq "statically linked|static-pie linked"
+    - name: Report binary size
+      run: |
+        BIN="target/x86_64-unknown-linux-musl/release/nctui"
+        echo "Uncompressed: $(stat --printf='%s' "$BIN") bytes"

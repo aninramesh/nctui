@@ -8,39 +8,56 @@ Terminal UI viewer for NetCDF4 / HDF5 datasets, built with Rust and [ratatui](ht
 - **2D heatmap** -- color-mapped visualization using Unicode block characters (░▒▓█) with a blue-to-red palette and automatic downsampling
 - **Histogram overlay** -- equal-width bin distribution plot with adjustable bin count (4--80)
 - **Dimension slicer** -- interactively pick a 2D slice from an nD variable by assigning X/Y axes and stepping through fixed dimensions
+- **NetCDF/HDF5 backend** -- reads real NetCDF4 and HDF5 files via the [netcdf](https://crates.io/crates/netcdf) crate; the C libraries can be bundled from source for a fully self-contained static binary
 
 All rendering is terminal-native -- no GPU, no graphics protocol, just Unicode and ANSI colors.
 
 ## Requirements
 
-- Rust 1.70+ (edition 2021)
+- Rust 1.77+ (edition 2021)
+- For the default build: system `libnetcdf-dev` / `libhdf5-dev`
+- For static builds: `cmake`, `g++`, `m4`, `musl-tools`
+
+## Cargo features
+
+| Feature | Default | Description |
+|---------|---------|-------------|
+| `netcdf-backend` | yes | Enables the real NetCDF/HDF5 file reading backend |
+| `static` | no | Compiles `libnetcdf` + `libhdf5` from source for fully self-contained static binaries (implies `netcdf-backend`) |
+
+Build without the backend (TUI widget library only):
+
+```bash
+cargo build --release --no-default-features
+```
 
 ## Build
 
 ### Development (dynamic, default)
 
-```
+```bash
+sudo apt-get install libnetcdf-dev libhdf5-dev   # Debian/Ubuntu
 cargo build --release
 ```
 
-The binary is written to `target/release/nctui`. It links dynamically against
-the system C library (glibc on most Linux distros) and is the recommended path
-for local development and testing.
+The binary links dynamically against system `libnetcdf` / `libhdf5` and is the
+recommended path for local development and testing.
 
-### Static release (musl)
+### Static release (musl, bundled NetCDF/HDF5)
 
-Fully-static binaries that run on any Linux without runtime dependencies:
+Fully-static binaries that bundle `libnetcdf` and `libhdf5` compiled from
+source, producing a single binary with zero runtime dependencies:
 
 ```bash
 # x86_64
 rustup target add x86_64-unknown-linux-musl
-sudo apt-get install musl-tools          # Debian/Ubuntu
-cargo build --release --target x86_64-unknown-linux-musl
+sudo apt-get install musl-tools cmake g++ m4
+cargo build --release --target x86_64-unknown-linux-musl --features static
 
 # aarch64 (cross-compile from x86_64 host)
 rustup target add aarch64-unknown-linux-musl
-sudo apt-get install gcc-aarch64-linux-gnu
-cargo build --release --target aarch64-unknown-linux-musl
+sudo apt-get install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake m4
+cargo build --release --target aarch64-unknown-linux-musl --features static
 ```
 
 A convenience script builds one or both targets:
@@ -55,17 +72,18 @@ Static binaries land in `target/<triple>/release/nctui`.
 
 ## Releases
 
-Pre-built static Linux binaries (x86_64 and aarch64) are published
-automatically when a version tag is pushed:
+Pre-built static Linux binaries (x86_64 and aarch64) with bundled
+NetCDF/HDF5 are published automatically when a version tag is pushed:
 
 ```
-git tag v0.5.4
-git push origin v0.5.4
+git tag v0.6.0
+git push origin v0.6.0
 ```
 
 The [Release workflow](.github/workflows/release.yml) builds both architectures
-via musl, creates a GitHub Release, and uploads `nctui-linux-x86_64.tar.gz` and
-`nctui-linux-aarch64.tar.gz` with SHA-256 checksums.
+via musl with `--features static`, creates a GitHub Release, and uploads
+`nctui-linux-x86_64.tar.gz` and `nctui-linux-aarch64.tar.gz` with SHA-256
+checksums.
 
 ## Usage
 
@@ -78,7 +96,8 @@ nctui <file.nc>
 The test suite includes per-module unit tests and 16 snapshot tests (via [insta](https://insta.rs/)) that render each widget into a buffer and compare against golden files.
 
 ```
-cargo test                   # run all tests
+cargo test                   # run all tests (needs libnetcdf-dev)
+cargo test --no-default-features   # run TUI widget tests only
 cargo insta test --review    # review snapshot changes after code edits
 ```
 

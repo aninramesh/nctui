@@ -1,6 +1,6 @@
 name: Release
 
-# Trigger on version tags: push a tag like v0.5.4 to create a release.
+# Trigger on version tags: push a tag like v0.6.0 to create a release.
 on:
   push:
     tags:
@@ -34,25 +34,37 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install musl tools (x86_64)
+      # cmake + C/C++ compiler are required by netcdf-src and hdf5-src to
+      # compile the vendored C libraries from source (--features static).
+      - name: Install build tools and musl (x86_64)
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools cmake g++ m4
 
       - name: Install cross-compilation tools (aarch64)
         if: matrix.target == 'aarch64-unknown-linux-musl'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
-          # Point cargo at the aarch64 cross-linker
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu musl-tools cmake m4
+          # Point cargo at the aarch64 cross-linker and set C/C++ compilers
+          # so that cmake picks up the cross toolchain for libnetcdf/libhdf5.
           mkdir -p .cargo
           cat >> .cargo/config.toml <<'EOF'
           [target.aarch64-unknown-linux-musl]
           linker = "aarch64-linux-gnu-gcc"
           rustflags = ["-C", "target-feature=+crt-static"]
           EOF
+        env:
+          CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
+          CXX_aarch64_unknown_linux_musl: aarch64-linux-gnu-g++
 
-      - name: Build static release binary
-        run: cargo build --release --target ${{ matrix.target }}
+      - name: Build static release binary with bundled NetCDF/HDF5
+        run: cargo build --release --target ${{ matrix.target }} --features static
+        env:
+          # For aarch64 cross-builds, tell cmake/cc-rs which compilers to use.
+          CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
+          CXX_aarch64_unknown_linux_musl: aarch64-linux-gnu-g++
 
       - name: Verify static linking
         if: matrix.target == 'x86_64-unknown-linux-musl'
@@ -62,12 +74,19 @@ jobs:
           # Accept both classic static binaries and valid static PIE binaries.
           echo "$FILE_OUTPUT" | grep -Eq "statically linked|static-pie linked"
 
+      - name: Report binary size
+        run: |
+          BIN="target/${{ matrix.target }}/release/nctui"
+          ls -la "$BIN"
+          echo "Uncompressed: $(stat --printf='%s' "$BIN") bytes"
+
       - name: Package binary
         run: |
           cd target/${{ matrix.target }}/release
           tar czf ../../../${{ matrix.asset_name }}.tar.gz nctui
           cd ../../..
           sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
+          echo "Compressed: $(stat --printf='%s' ${{ matrix.asset_name }}.tar.gz) bytes"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
