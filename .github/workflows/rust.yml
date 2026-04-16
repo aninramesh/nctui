@@ -48,13 +48,15 @@ jobs:
         targets: x86_64-unknown-linux-musl
     - name: Install musl + cmake + C++ compiler
       run: sudo apt-get update && sudo apt-get install -y musl-tools cmake g++ m4
+    - name: Create musl C++ wrapper
+      run: |
+        # musl-tools ships x86_64-linux-musl-gcc but no g++ wrapper.
+        # cmake still probes for CXX even though netcdf-c is pure C.
+        # Create a wrapper that invokes musl-gcc with the C++ standard
+        # library disabled (no C++ code is actually compiled).
+        sudo ln -sf /usr/bin/x86_64-linux-musl-gcc /usr/local/bin/x86_64-linux-musl-g++
     - name: Build static binary with bundled NetCDF/HDF5
       run: cargo build --release --target x86_64-unknown-linux-musl --features static
-      env:
-        # The cmake crate looks for x86_64-linux-musl-g++ which doesn't
-        # exist in musl-tools. Point the C++ compiler at the system g++
-        # since netcdf-c/hdf5 are C libraries (cmake still checks CXX).
-        CXX: g++
     - name: Verify static linking
       run: |
         file target/x86_64-unknown-linux-musl/release/nctui
