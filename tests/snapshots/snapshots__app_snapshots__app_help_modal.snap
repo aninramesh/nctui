@@ -1,0 +1,28 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_string(&buf)
+---
+┌ Search ─┌ Keybindings ─────────────────────────────────────────────┐─────────┐
+│         │j/k or ↑↓           Navigate tree                         │         │
+└─────────│Enter/Space         Select variable / expand group        │         │
+┌ Variable│g/G                 Jump to top / bottom                  │         │
+│› ▶ /    │/                   Open search                           │         │
+│         │Esc                 Close modal / cancel search           │         │
+│         │h                   Toggle histogram overlay              │         │
+│         │t                   Toggle table preview                  │         │
+│         │s                   Open slice picker (nD vars)           │         │
+│         │?                   Toggle this help                      │         │
+│         │q                   Quit                                  │         │
+│         │                                                          │         │
+│         │In histogram:       +/- adjust bins                       │         │
+│         │In table:           ↑↓←→ scroll                           │         │
+│         │In slicer:          x/y/f role, h/l idx                   │─────────┘
+│         │                                                          │─────────┐
+│         │                                                          │         │
+│         │                                                          │         │
+│         │                                                          │         │
+│         │                                                          │         │
+│         │                                                          │         │
+│         │                                                          │         │
+└─────────└──────────────────────────────────────────────────────────┘─────────┘
+ test.nc  | ? help | q quit

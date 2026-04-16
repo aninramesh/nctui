@@ -4,6 +4,7 @@ Terminal UI viewer for NetCDF4 / HDF5 datasets, built with Rust and [ratatui](ht
 
 ## Features
 
+- **Interactive TUI** -- full terminal application with keyboard navigation, modal overlays, and a composable panel layout
 - **Tree navigator** -- browse groups and variables with expand/collapse; coordinate variables are auto-detected and marked
 - **2D heatmap** -- color-mapped visualization using Unicode block characters (░▒▓█) with a blue-to-red palette and automatic downsampling
 - **Coordinate-aware axes** -- plots display real coordinate values (e.g. latitude/longitude) when coordinate variables are available, instead of raw indices
@@ -80,8 +81,8 @@ Pre-built static Linux binaries (x86_64 and aarch64) with bundled
 NetCDF/HDF5 are published automatically when a version tag is pushed:
 
 ```
-git tag v0.7.0
-git push origin v0.7.0
+git tag v0.8.0
+git push origin v0.8.0
 ```
 
 The [Release workflow](.github/workflows/release.yml) builds both architectures
@@ -94,6 +95,51 @@ checksums.
 ```
 nctui <file.nc>
 ```
+
+Opens an interactive terminal UI with the dataset's variables displayed in a
+tree on the left and a heatmap/stats panel on the right.
+
+### Keybindings
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` or `↑` / `↓` | Navigate the variable tree |
+| `Enter` / `Space` | Select variable (load heatmap + stats) or expand/collapse group |
+| `g` / `G` | Jump to top / bottom of tree |
+| `/` | Open fuzzy search bar |
+| `Esc` | Close modal / cancel search / clear filter |
+| `h` | Toggle histogram overlay |
+| `t` | Toggle table preview |
+| `s` | Open dimension slicer (for variables with >2 dimensions) |
+| `?` | Toggle help overlay |
+| `q` / `Ctrl+C` | Quit |
+
+**Inside histogram overlay:**
+
+| Key | Action |
+|-----|--------|
+| `+` / `=` | Increase bin count |
+| `-` | Decrease bin count |
+| `Esc` / `h` | Close |
+
+**Inside table preview:**
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` / `j` / `k` | Scroll rows |
+| `←` / `→` / `h` / `l` | Scroll columns |
+| `PgUp` / `PgDn` | Scroll 20 rows |
+| `Esc` / `t` | Close |
+
+**Inside dimension slicer:**
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` or `↑` / `↓` | Select dimension row |
+| `x` / `y` / `f` | Assign X-axis / Y-axis / Fixed role |
+| `h` / `l` or `←` / `→` | Decrement / increment fixed index |
+| `Enter` | Confirm slice |
+| `Esc` | Cancel |
 
 ## Tests
 

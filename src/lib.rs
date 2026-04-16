@@ -7,4 +7,8 @@ pub mod table_preview;
 pub mod tree;
 
 #[cfg(feature = "netcdf-backend")]
+pub mod app;
+#[cfg(feature = "netcdf-backend")]
 pub mod backend;
+#[cfg(feature = "netcdf-backend")]
+pub mod ui;

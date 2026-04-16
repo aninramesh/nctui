@@ -440,3 +440,114 @@ fn snapshot_search_results() {
     ss.render_results(area, &mut buf);
     insta::assert_snapshot!("search_results", buffer_to_string(&buf));
 }
+
+// ---------------------------------------------------------------------------
+// Full UI Layout Snapshots (requires netcdf-backend for App)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "netcdf-backend")]
+mod app_snapshots {
+    use super::*;
+    use indexmap::IndexMap;
+    use nctui::app::{App, Focus, Modal};
+    use nctui::backend::{DatasetInfo, VarMeta};
+    use nctui::ui;
+
+    fn stub_info() -> DatasetInfo {
+        let mut groups = IndexMap::new();
+        groups.insert(
+            "/".to_string(),
+            vec!["temperature".to_string(), "lat".to_string()],
+        );
+
+        let mut variables = IndexMap::new();
+        variables.insert(
+            "temperature".to_string(),
+            vec!["lat".to_string(), "lon".to_string()],
+        );
+        variables.insert("lat".to_string(), vec!["lat".to_string()]);
+
+        let mut var_meta = IndexMap::new();
+        var_meta.insert(
+            "temperature".to_string(),
+            VarMeta {
+                name: "temperature".to_string(),
+                dim_names: vec!["lat".to_string(), "lon".to_string()],
+                dim_sizes: vec![4, 6],
+            },
+        );
+        var_meta.insert(
+            "lat".to_string(),
+            VarMeta {
+                name: "lat".to_string(),
+                dim_names: vec!["lat".to_string()],
+                dim_sizes: vec![4],
+            },
+        );
+
+        let mut coord_vars = IndexMap::new();
+        coord_vars.insert("lat".to_string(), "lat".to_string());
+
+        DatasetInfo {
+            groups,
+            variables,
+            var_meta,
+            coord_vars,
+        }
+    }
+
+    #[test]
+    fn snapshot_app_initial() {
+        let info = stub_info();
+        let app = App::new("test.nc".to_string(), &info);
+        let area = Rect::new(0, 0, 80, 24);
+        let mut buf = Buffer::empty(area);
+        ui::draw(&app, area, &mut buf);
+        insta::assert_snapshot!("app_initial", buffer_to_string(&buf));
+    }
+
+    #[test]
+    fn snapshot_app_with_search_active() {
+        let info = stub_info();
+        let mut app = App::new("test.nc".to_string(), &info);
+        app.focus = Focus::Search;
+        app.search.active = true;
+        for ch in "temp".chars() {
+            app.search.push_char(ch);
+        }
+        let area = Rect::new(0, 0, 80, 24);
+        let mut buf = Buffer::empty(area);
+        ui::draw(&app, area, &mut buf);
+        insta::assert_snapshot!("app_search_active", buffer_to_string(&buf));
+    }
+
+    #[test]
+    fn snapshot_app_help_modal() {
+        let info = stub_info();
+        let mut app = App::new("test.nc".to_string(), &info);
+        app.modal = Modal::Help;
+        let area = Rect::new(0, 0, 80, 24);
+        let mut buf = Buffer::empty(area);
+        ui::draw(&app, area, &mut buf);
+        insta::assert_snapshot!("app_help_modal", buffer_to_string(&buf));
+    }
+
+    #[test]
+    fn snapshot_app_with_heatmap_and_stats() {
+        let info = stub_info();
+        let mut app = App::new("test.nc".to_string(), &info);
+
+        // Simulate loading a 2D variable
+        let data: Vec<f64> = (0..24).map(|i| i as f64).collect();
+        let data_2d: Vec<Vec<f64>> = data.chunks(6).map(|c| c.to_vec()).collect();
+        app.heatmap = Some(nctui::heatmap::HeatmapPanel::new(data_2d, "temperature"));
+        app.stats.set_data("temperature", &data);
+        app.current_var = Some("temperature".to_string());
+        app.status_msg = "temperature [lat=4, lon=6]".to_string();
+
+        let area = Rect::new(0, 0, 80, 24);
+        let mut buf = Buffer::empty(area);
+        ui::draw(&app, area, &mut buf);
+        insta::assert_snapshot!("app_with_data", buffer_to_string(&buf));
+    }
+}
