@@ -1,0 +1,16 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_string(&buf)
+---
+┌ Variables ───────────────────────────┐
+│› ▼ atmosphere                        │
+│      temperature                     │
+│      pressure                        │
+│    ◆ lat                             │
+│  ▶ ocean                             │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+└──────────────────────────────────────┘

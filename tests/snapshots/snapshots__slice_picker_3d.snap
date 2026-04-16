@@ -1,0 +1,18 @@
+---
+source: tests/snapshots.rs
+expression: buffer_to_string(&buf)
+---
+
+
+
+
+
+
+     ┌ Slice: temperature ────────────────────────────┐
+     │Dim          Size   Role     Index              │
+     │time         12     Fixed    0                  │
+     │lat          180    Y-axis   -                  │
+     │lon          360    X-axis   -                  │
+     │                                                │
+     │                                                │
+     └x/y/f role  h/l idx  Enter ok  Esc cancel───────┘

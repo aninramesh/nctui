@@ -1,0 +1,15 @@
+[package]
+name = "nctui"
+version = "0.5.4"
+edition = "2021"
+description = "Terminal UI viewer for NetCDF4 / HDF5 datasets"
+
+[dependencies]
+ratatui = "0.28"
+crossterm = { version = "0.28", features = ["event-stream"] }
+indexmap = "2"
+strum = { version = "0.26", features = ["derive"] }
+unicode-width = "0.1"
+
+[dev-dependencies]
+insta = "1"
