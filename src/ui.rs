@@ -257,11 +257,12 @@ fn draw_help_modal(area: Rect, buf: &mut Buffer) {
         ("?", "Toggle this help"),
         ("q", "Quit"),
         ("", ""),
-        ("1D vars:", "shown as line plot"),
-        ("2D vars:", "shown as heatmap"),
+        ("1D vars:", "line plot"),
+        ("2D vars:", "heatmap"),
+        ("3D/4D/5D+ vars:", "slice picker"),
         ("In histogram:", "+/- adjust bins"),
         ("In table:", "\u{2191}\u{2193}\u{2190}\u{2192} scroll"),
-        ("In slicer:", "x/y/f role, h/l idx"),
+        ("In slicer:", "x/y/f role, 1 line, 2 map"),
     ];
 
     let ks = Style::default()

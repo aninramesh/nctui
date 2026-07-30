@@ -22,7 +22,13 @@ pub struct DimState {
     pub role: DimRole,
 }
 
-/// Complete hyperslab specification for slicing an nD variable to 2D.
+/// Complete hyperslab specification for slicing an nD variable to 1D or 2D.
+///
+/// - **1 free axis** (X or Y) → line plot along that dimension
+/// - **2 free axes** (X and Y) → 2D heatmap
+///
+/// Remaining dimensions are fixed at a chosen index. Works for any rank
+/// (3D, 4D, 5D, …).
 #[derive(Debug, Clone)]
 pub struct SliceSpec {
     pub var_name: String,
@@ -30,7 +36,8 @@ pub struct SliceSpec {
 }
 
 impl SliceSpec {
-    /// Create a default spec: last dim → X, second-last → Y, rest fixed at 0.
+    /// Create a default heatmap-oriented spec: last dim → X, second-last → Y,
+    /// rest fixed at 0. For rank-1 variables the sole dim is X (line plot).
     pub fn default_for(var_name: &str, dim_names: &[String], dim_sizes: &[usize]) -> Self {
         let n = dim_names.len();
         let dims = dim_names
@@ -38,7 +45,9 @@ impl SliceSpec {
             .zip(dim_sizes.iter())
             .enumerate()
             .map(|(i, (name, &size))| {
-                let role = if n >= 2 && i == n - 1 {
+                let role = if n == 1 && i == 0 {
+                    DimRole::AxisX
+                } else if n >= 2 && i == n - 1 {
                     DimRole::AxisX
                 } else if n >= 2 && i == n - 2 {
                     DimRole::AxisY
@@ -58,12 +67,87 @@ impl SliceSpec {
         }
     }
 
+    /// Line-plot mode: last dimension free (X), every earlier dim fixed at 0.
+    pub fn default_line_for(var_name: &str, dim_names: &[String], dim_sizes: &[usize]) -> Self {
+        let n = dim_names.len();
+        let dims = dim_names
+            .iter()
+            .zip(dim_sizes.iter())
+            .enumerate()
+            .map(|(i, (name, &size))| {
+                let role = if n >= 1 && i == n - 1 {
+                    DimRole::AxisX
+                } else {
+                    DimRole::Fixed(0)
+                };
+                DimState {
+                    name: name.clone(),
+                    size,
+                    role,
+                }
+            })
+            .collect();
+        Self {
+            var_name: var_name.to_string(),
+            dims,
+        }
+    }
+
+    /// Reset roles to heatmap mode (2 free axes when rank ≥ 2).
+    pub fn set_heatmap_mode(&mut self) {
+        let n = self.dims.len();
+        for (i, d) in self.dims.iter_mut().enumerate() {
+            d.role = if n == 1 && i == 0 {
+                DimRole::AxisX
+            } else if n >= 2 && i == n - 1 {
+                DimRole::AxisX
+            } else if n >= 2 && i == n - 2 {
+                DimRole::AxisY
+            } else {
+                DimRole::Fixed(0)
+            };
+        }
+    }
+
+    /// Reset roles to line mode (1 free axis: last dim).
+    pub fn set_line_mode(&mut self) {
+        let n = self.dims.len();
+        for (i, d) in self.dims.iter_mut().enumerate() {
+            d.role = if n >= 1 && i == n - 1 {
+                DimRole::AxisX
+            } else {
+                DimRole::Fixed(0)
+            };
+        }
+    }
+
     /// Count of free (non-fixed) dimensions.
     pub fn free_dim_count(&self) -> usize {
         self.dims
             .iter()
             .filter(|d| !matches!(d.role, DimRole::Fixed(_)))
             .count()
+    }
+
+    /// Whether the current free-axis assignment is valid for plotting.
+    ///
+    /// Accepts 1 free axis (line) or 2 free axes with both X and Y (heatmap).
+    pub fn is_valid_plot(&self) -> bool {
+        match self.free_dim_count() {
+            1 => self.line_axis().is_some(),
+            2 => self.xy_axes().is_some(),
+            _ => false,
+        }
+    }
+
+    /// Return the free axis index when exactly one dimension is free (X or Y).
+    pub fn line_axis(&self) -> Option<usize> {
+        if self.free_dim_count() != 1 {
+            return None;
+        }
+        self.dims
+            .iter()
+            .position(|d| matches!(d.role, DimRole::AxisX | DimRole::AxisY))
     }
 
     /// Return (row_axis_idx, col_axis_idx) for the two free axes.
@@ -104,6 +188,21 @@ impl SliceSpec {
             }
         }
     }
+
+    /// Human-readable summary of fixed dimensions, e.g. `time=0, level=3`.
+    pub fn fixed_summary(&self) -> String {
+        self.dims
+            .iter()
+            .filter_map(|d| {
+                if let DimRole::Fixed(idx) = d.role {
+                    Some(format!("{}={}", d.name, idx))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 /// Modal widget state for the slice picker.
@@ -127,14 +226,27 @@ impl SlicePicker {
         if !self.visible || area.width < 10 || area.height < 6 {
             return;
         }
-        // Center modal
-        let modal_w = area.width.min(50).max(30);
-        let modal_h = (self.spec.dims.len() as u16 + 5).min(area.height);
+        // Center modal — extra row for mode hint
+        let modal_w = area.width.min(56).max(30);
+        let modal_h = (self.spec.dims.len() as u16 + 6).min(area.height);
         let x = area.x + (area.width.saturating_sub(modal_w)) / 2;
         let y = area.y + (area.height.saturating_sub(modal_h)) / 2;
         let modal_area = Rect::new(x, y, modal_w, modal_h);
 
         Clear.render(modal_area, buf);
+
+        let mode = match self.spec.free_dim_count() {
+            1 => "line plot",
+            2 if self.spec.xy_axes().is_some() => "heatmap",
+            n => {
+                if n == 0 {
+                    "fix all dims"
+                } else {
+                    "need 1 or 2 free"
+                }
+            }
+        };
+        let title = format!(" Slice: {} → {} ", self.spec.var_name, mode);
 
         let header = TableRow::new(vec![
             Cell::from("Dim").style(Style::default().add_modifier(Modifier::BOLD)),
@@ -174,7 +286,6 @@ impl SlicePicker {
             })
             .collect();
 
-        let title = format!(" Slice: {} ", self.spec.var_name);
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
@@ -186,10 +297,17 @@ impl SlicePicker {
             Constraint::Length(8),
             Constraint::Length(6),
         ];
+        // Leave bottom row for hints
+        let table_area = Rect::new(
+            modal_area.x,
+            modal_area.y,
+            modal_area.width,
+            modal_area.height.saturating_sub(1),
+        );
         let table = Table::new(rows, widths)
             .header(header)
             .block(block);
-        Widget::render(table, modal_area, buf);
+        Widget::render(table, table_area, buf);
 
         // Keybind hints at bottom
         if modal_area.height > 3 {
@@ -200,15 +318,18 @@ impl SlicePicker {
                 Span::styled("y", Style::default().fg(Color::Green)),
                 Span::raw("/"),
                 Span::styled("f", Style::default().fg(Color::Green)),
-                Span::raw(" role  "),
+                Span::raw("  "),
+                Span::styled("1", Style::default().fg(Color::Green)),
+                Span::raw(" line "),
+                Span::styled("2", Style::default().fg(Color::Green)),
+                Span::raw(" map  "),
                 Span::styled("h", Style::default().fg(Color::Green)),
                 Span::raw("/"),
                 Span::styled("l", Style::default().fg(Color::Green)),
                 Span::raw(" idx  "),
                 Span::styled("Enter", Style::default().fg(Color::Green)),
-                Span::raw(" ok  "),
+                Span::raw("  "),
                 Span::styled("Esc", Style::default().fg(Color::Green)),
-                Span::raw(" cancel"),
             ]);
             let hint_area = Rect::new(modal_area.x + 1, hint_y, modal_area.width - 2, 1);
             Widget::render(hint, hint_area, buf);
@@ -230,6 +351,7 @@ mod tests {
         assert_eq!(spec.free_dim_count(), 2);
         assert_eq!(spec.dims[0].role, DimRole::AxisY);
         assert_eq!(spec.dims[1].role, DimRole::AxisX);
+        assert!(spec.is_valid_plot());
     }
 
     #[test]
@@ -255,6 +377,71 @@ mod tests {
         assert_eq!(spec.free_dim_count(), 2);
         assert_eq!(spec.dims[0].role, DimRole::Fixed(0));
         assert_eq!(spec.dims[1].role, DimRole::Fixed(0));
+        assert!(spec.is_valid_plot());
+    }
+
+    #[test]
+    fn test_default_spec_5d() {
+        let names = [
+            "ens".into(),
+            "time".into(),
+            "level".into(),
+            "lat".into(),
+            "lon".into(),
+        ];
+        let sizes = [3usize, 12, 10, 180, 360];
+        let spec = SliceSpec::default_for("temp", &names, &sizes);
+        assert_eq!(spec.dims.len(), 5);
+        assert_eq!(spec.free_dim_count(), 2);
+        assert_eq!(spec.dims[0].role, DimRole::Fixed(0));
+        assert_eq!(spec.dims[1].role, DimRole::Fixed(0));
+        assert_eq!(spec.dims[2].role, DimRole::Fixed(0));
+        assert_eq!(spec.dims[3].role, DimRole::AxisY);
+        assert_eq!(spec.dims[4].role, DimRole::AxisX);
+    }
+
+    #[test]
+    fn test_line_mode_3d() {
+        let mut spec = SliceSpec::default_for(
+            "temp",
+            &["time".into(), "lat".into(), "lon".into()],
+            &[12, 180, 360],
+        );
+        spec.set_line_mode();
+        assert_eq!(spec.free_dim_count(), 1);
+        assert_eq!(spec.line_axis(), Some(2)); // lon
+        assert!(spec.is_valid_plot());
+        assert!(spec.xy_axes().is_none());
+    }
+
+    #[test]
+    fn test_line_mode_5d() {
+        let names = [
+            "ens".into(),
+            "time".into(),
+            "level".into(),
+            "lat".into(),
+            "lon".into(),
+        ];
+        let sizes = [3usize, 12, 10, 180, 360];
+        let spec = SliceSpec::default_line_for("temp", &names, &sizes);
+        assert_eq!(spec.free_dim_count(), 1);
+        assert_eq!(spec.line_axis(), Some(4));
+        assert_eq!(spec.dims[0].role, DimRole::Fixed(0));
+        assert_eq!(spec.dims[4].role, DimRole::AxisX);
+    }
+
+    #[test]
+    fn test_heatmap_mode_from_line() {
+        let mut spec = SliceSpec::default_line_for(
+            "temp",
+            &["time".into(), "lat".into(), "lon".into()],
+            &[12, 180, 360],
+        );
+        assert_eq!(spec.free_dim_count(), 1);
+        spec.set_heatmap_mode();
+        assert_eq!(spec.free_dim_count(), 2);
+        assert!(spec.xy_axes().is_some());
     }
 
     #[test]
@@ -297,5 +484,30 @@ mod tests {
         let (y, x) = spec.xy_axes().unwrap();
         assert_eq!(y, 1); // lat
         assert_eq!(x, 2); // lon
+    }
+
+    #[test]
+    fn test_fixed_summary() {
+        let mut spec = SliceSpec::default_for(
+            "temp",
+            &["time".into(), "level".into(), "lat".into(), "lon".into()],
+            &[12, 10, 180, 360],
+        );
+        spec.increment_fixed(1);
+        assert_eq!(spec.fixed_summary(), "time=0, level=1");
+    }
+
+    #[test]
+    fn test_invalid_when_zero_or_three_free() {
+        let mut spec = SliceSpec::default_for(
+            "temp",
+            &["a".into(), "b".into(), "c".into()],
+            &[2, 3, 4],
+        );
+        // Fix everything → invalid
+        spec.assign_axis(1, DimRole::Fixed(0));
+        spec.assign_axis(2, DimRole::Fixed(0));
+        assert_eq!(spec.free_dim_count(), 0);
+        assert!(!spec.is_valid_plot());
     }
 }

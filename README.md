@@ -6,8 +6,9 @@ Terminal UI viewer for NetCDF4 / HDF5 datasets, built with Rust and [ratatui](ht
 
 - **Interactive TUI** -- full terminal application with keyboard navigation, modal overlays, and a composable panel layout
 - **Tree navigator** -- browse groups and variables with expand/collapse; coordinate variables are auto-detected and marked
-- **1D line plot** -- braille-resolution line chart for 1D variables with coordinate-aware X-axis when available
+- **1D line plot** -- braille-resolution line chart for 1D variables (and 1D slices of nD variables) with coordinate-aware X-axis when available
 - **2D heatmap** -- color-mapped visualization using Unicode block characters (░▒▓█) with a blue-to-red palette and automatic downsampling
+- **nD slicing** -- pick a 1D line or 2D plane from 3D/4D/5D+ variables by fixing free dimensions
 - **Coordinate-aware axes** -- plots display real coordinate values (e.g. latitude/longitude) when coordinate variables are available, instead of raw indices
 - **Stats panel** -- summary statistics including count, min/max, mean, median, standard deviation, percentiles (p5/p25/p75/p95), NaN/Inf counts, and valid-data fraction
 - **Table preview** -- inspect exact numeric values for 1D variables or small 2D slices in a scrollable table overlay
@@ -20,7 +21,7 @@ All rendering is terminal-native -- no GPU, no graphics protocol, just Unicode a
 
 ## Requirements
 
-- Rust 1.77+ (edition 2021)
+- Rust 1.85+ (edition 2024)
 - For the default build: system `libnetcdf-dev` / `libhdf5-dev`
 - For static builds: `cmake`, `g++`, `m4`, `musl-tools`
 
@@ -98,8 +99,11 @@ nctui <file.nc>
 ```
 
 Opens an interactive terminal UI with the dataset's variables displayed in a
-tree on the left and a plot/stats panel on the right. Selecting a **1D**
-variable shows a line plot; selecting a **2D** variable shows a heatmap.
+tree on the left and a plot/stats panel on the right:
+
+- **1D** → line plot
+- **2D** → heatmap
+- **3D / 4D / 5D+** → dimension slicer (choose a 1D line or 2D plane)
 
 ### Keybindings
 
@@ -133,14 +137,16 @@ variable shows a line plot; selecting a **2D** variable shows a heatmap.
 | `PgUp` / `PgDn` | Scroll 20 rows |
 | `Esc` / `t` | Close |
 
-**Inside dimension slicer:**
+**Inside dimension slicer** (opened automatically for 3D/4D/5D+ variables, or with `s`):
 
 | Key | Action |
 |-----|--------|
 | `j` / `k` or `↑` / `↓` | Select dimension row |
 | `x` / `y` / `f` | Assign X-axis / Y-axis / Fixed role |
+| `1` | Line mode: last dim free (X), all others fixed |
+| `2` | Heatmap mode: last two dims free (Y/X), rest fixed |
 | `h` / `l` or `←` / `→` | Decrement / increment fixed index |
-| `Enter` | Confirm slice |
+| `Enter` | Confirm: **1 free axis** → line plot; **2 free axes** → heatmap |
 | `Esc` | Cancel |
 
 ## Tests

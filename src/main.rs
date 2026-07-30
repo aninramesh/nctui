@@ -172,10 +172,12 @@ fn handle_key(
                         app.status_msg.clear();
                     }
                     KeyCode::Enter => {
-                        if picker.spec.free_dim_count() == 2 {
+                        if picker.spec.is_valid_plot() {
                             app.apply_slice(file, info);
                         } else {
-                            app.status_msg = "Assign exactly 2 free axes (X and Y)".to_string();
+                            app.status_msg =
+                                "Need 1 free axis (line plot) or 2 free axes X+Y (heatmap)"
+                                    .to_string();
                         }
                     }
                     KeyCode::Down | KeyCode::Char('j') => {
@@ -196,6 +198,16 @@ fn handle_key(
                     }
                     KeyCode::Char('f') => {
                         picker.spec.assign_axis(picker.selected, DimRole::Fixed(0));
+                    }
+                    KeyCode::Char('1') => {
+                        picker.spec.set_line_mode();
+                        app.status_msg =
+                            "Line mode: 1 free axis → line plot on Enter".to_string();
+                    }
+                    KeyCode::Char('2') => {
+                        picker.spec.set_heatmap_mode();
+                        app.status_msg =
+                            "Heatmap mode: 2 free axes → heatmap on Enter".to_string();
                     }
                     KeyCode::Char('l') | KeyCode::Right => {
                         picker.spec.increment_fixed(picker.selected);

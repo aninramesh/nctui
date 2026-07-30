@@ -10,19 +10,27 @@
   available, otherwise 0-based indices. Y-axis labels show min / mid / max.
   Non-finite values (NaN/Inf) are skipped so gaps do not break the axis scale.
 
+- **nD → line or heatmap slices** — for 3D/4D/5D+ variables the dimension
+  slicer accepts **1 free axis** (line plot) or **2 free axes** (heatmap).
+  Press `1` for line mode (last dim free) or `2` for heatmap mode. Fixed
+  dimensions keep their indices; works for any rank.
+
 ### Architecture
 
 - `src/line_plot.rs` — new `LinePlotPanel` widget built on ratatui `Chart`
   with `GraphType::Line` and braille markers.
 - `App` holds `line_plot: Option<LinePlotPanel>` mutually exclusive with
   the 2D `heatmap`. The UI plot panel prefers the line plot when present.
-- Help overlay notes that 1D vars use the line plot and 2D vars the heatmap.
+- `SliceSpec` gains `line_axis()`, `is_valid_plot()`, `set_line_mode()`,
+  `set_heatmap_mode()`, and `fixed_summary()` for 1D/2D hyperslabs.
+- Package edition raised to **2024** (Cargo does not support a 2026 edition).
 
 ### Tests
 
 - Unit tests for range calculation, coordinate handling, NaN skipping,
   degenerate flat series, and render smoke tests.
 - Snapshot tests for basic, coordinate-aware, and sparse (NaN) line plots.
+- Slice-picker tests for 5D defaults, line mode, and mode switching.
 
 ## v0.8.0
 

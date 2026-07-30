@@ -233,7 +233,8 @@ impl App {
         }
     }
 
-    /// Apply the confirmed slice spec to load a 2D slice from an nD variable.
+    /// Apply the confirmed slice spec to load a 1D line or 2D plane from an
+    /// nD variable (3D, 4D, 5D, …).
     pub fn apply_slice(
         &mut self,
         file: &netcdf::File,
@@ -274,18 +275,6 @@ impl App {
             }
         };
 
-        // Extract the 2D slice
-        let (y_idx, x_idx) = match spec.xy_axes() {
-            Some(pair) => pair,
-            None => {
-                self.status_msg = "Need exactly 2 free axes".to_string();
-                return;
-            }
-        };
-
-        let y_size = meta.dim_sizes[y_idx];
-        let x_size = meta.dim_sizes[x_idx];
-
         // Build strides for indexing into the flat array
         let mut strides = vec![1usize; meta.dim_sizes.len()];
         for i in (0..meta.dim_sizes.len() - 1).rev() {
@@ -300,67 +289,97 @@ impl App {
             }
         }
 
-        // Extract 2D slice
-        let mut data_2d = Vec::with_capacity(y_size);
-        for yr in 0..y_size {
-            let mut row = Vec::with_capacity(x_size);
-            for xc in 0..x_size {
-                let offset = base_offset + yr * strides[y_idx] + xc * strides[x_idx];
-                let val = all_data.get(offset).copied().unwrap_or(f64::NAN);
-                row.push(val);
+        let fixed_str = {
+            let s = spec.fixed_summary();
+            if s.is_empty() {
+                String::new()
+            } else {
+                format!(" ({s})")
             }
-            data_2d.push(row);
-        }
-
-        let flat_data: Vec<f64> = data_2d.iter().flat_map(|r| r.iter().copied()).collect();
-
-        let row_dim = &meta.dim_names[y_idx];
-        let col_dim = &meta.dim_names[x_idx];
-        let row_coords = crate::backend::read_coord_var(file, row_dim, info);
-        let col_coords = crate::backend::read_coord_var(file, col_dim, info);
-
-        self.current_var = Some(var_name.clone());
-        self.current_data = flat_data.clone();
-        self.stats.set_data(var_name, &flat_data);
-        self.histogram.set_data(&flat_data);
-        self.line_plot = None;
-        self.heatmap = Some(HeatmapPanel::with_coords(
-            data_2d.clone(),
-            var_name,
-            row_coords.clone(),
-            col_coords.clone(),
-        ));
-        self.table = Some(TablePreview::from_2d(
-            &data_2d,
-            var_name,
-            row_dim,
-            col_dim,
-            row_coords.as_deref(),
-            col_coords.as_deref(),
-        ));
-        self.table.as_mut().unwrap().visible = false;
-
-        // Build a description of fixed dims
-        let fixed_desc: Vec<String> = spec
-            .dims
-            .iter()
-            .filter_map(|d| {
-                if let DimRole::Fixed(idx) = d.role {
-                    Some(format!("{}={}", d.name, idx))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let fixed_str = if fixed_desc.is_empty() {
-            String::new()
-        } else {
-            format!(" ({})", fixed_desc.join(", "))
         };
 
-        self.status_msg = format!(
-            "{var_name} [{row_dim}={y_size}, {col_dim}={x_size}]{fixed_str}",
-        );
+        if let Some(line_idx) = spec.line_axis() {
+            // ---- 1D line plot along one free axis ----
+            let line_size = meta.dim_sizes[line_idx];
+            let mut data = Vec::with_capacity(line_size);
+            for i in 0..line_size {
+                let offset = base_offset + i * strides[line_idx];
+                data.push(all_data.get(offset).copied().unwrap_or(f64::NAN));
+            }
+
+            let dim = &meta.dim_names[line_idx];
+            let coords = crate::backend::read_coord_var(file, dim, info);
+
+            self.current_var = Some(var_name.clone());
+            self.current_data = data.clone();
+            self.stats.set_data(var_name, &data);
+            self.histogram.set_data(&data);
+            self.heatmap = None;
+            self.line_plot = Some(LinePlotPanel::new(
+                &data,
+                var_name,
+                dim,
+                coords.as_deref(),
+            ));
+            self.table = Some(TablePreview::from_1d(
+                &data,
+                var_name,
+                dim,
+                coords.as_deref(),
+            ));
+            self.table.as_mut().unwrap().visible = false;
+            self.status_msg = format!("{var_name} [{dim}={line_size}]{fixed_str}");
+        } else if let Some((y_idx, x_idx)) = spec.xy_axes() {
+            // ---- 2D heatmap plane ----
+            let y_size = meta.dim_sizes[y_idx];
+            let x_size = meta.dim_sizes[x_idx];
+
+            let mut data_2d = Vec::with_capacity(y_size);
+            for yr in 0..y_size {
+                let mut row = Vec::with_capacity(x_size);
+                for xc in 0..x_size {
+                    let offset = base_offset + yr * strides[y_idx] + xc * strides[x_idx];
+                    let val = all_data.get(offset).copied().unwrap_or(f64::NAN);
+                    row.push(val);
+                }
+                data_2d.push(row);
+            }
+
+            let flat_data: Vec<f64> =
+                data_2d.iter().flat_map(|r| r.iter().copied()).collect();
+
+            let row_dim = &meta.dim_names[y_idx];
+            let col_dim = &meta.dim_names[x_idx];
+            let row_coords = crate::backend::read_coord_var(file, row_dim, info);
+            let col_coords = crate::backend::read_coord_var(file, col_dim, info);
+
+            self.current_var = Some(var_name.clone());
+            self.current_data = flat_data.clone();
+            self.stats.set_data(var_name, &flat_data);
+            self.histogram.set_data(&flat_data);
+            self.line_plot = None;
+            self.heatmap = Some(HeatmapPanel::with_coords(
+                data_2d.clone(),
+                var_name,
+                row_coords.clone(),
+                col_coords.clone(),
+            ));
+            self.table = Some(TablePreview::from_2d(
+                &data_2d,
+                var_name,
+                row_dim,
+                col_dim,
+                row_coords.as_deref(),
+                col_coords.as_deref(),
+            ));
+            self.table.as_mut().unwrap().visible = false;
+            self.status_msg =
+                format!("{var_name} [{row_dim}={y_size}, {col_dim}={x_size}]{fixed_str}");
+        } else {
+            self.status_msg =
+                "Need 1 free axis (line) or 2 free axes X+Y (heatmap)".to_string();
+            return;
+        }
 
         self.modal = Modal::None;
         self.slice_picker = None;

@@ -1,5 +1,6 @@
 ---
 source: tests/snapshots.rs
+assertion_line: 211
 expression: buffer_to_string(&buf)
 ---
 
@@ -7,12 +8,12 @@ expression: buffer_to_string(&buf)
 
 
 
-
-     ┌ Slice: temperature ────────────────────────────┐
-     │Dim          Size   Role     Index              │
-     │time         12     Fixed    0                  │
-     │lat          180    Y-axis   -                  │
-     │lon          360    X-axis   -                  │
-     │                                                │
-     │                                                │
-     └x/y/f role  h/l idx  Enter ok  Esc cancel───────┘
+  ┌ Slice: temperature → heatmap ────────────────────────┐
+  │Dim          Size   Role     Index                    │
+  │time         12     Fixed    0                        │
+  │lat          180    Y-axis   -                        │
+  │lon          360    X-axis   -                        │
+  │                                                      │
+  │                                                      │
+  └──────────────────────────────────────────────────────┘
+   x/y/f  1 line 2 map  h/l idx  Enter  Esc
