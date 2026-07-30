@@ -12,6 +12,7 @@ use ratatui::{buffer::Buffer, layout::Rect};
 
 use nctui::heatmap::HeatmapPanel;
 use nctui::histogram::{Histogram, HistogramState};
+use nctui::line_plot::LinePlotPanel;
 use nctui::search::{SearchState, VarInfo};
 use nctui::slice_picker::{SlicePicker, SliceSpec};
 use nctui::stats::StatsPanel;
@@ -271,6 +272,41 @@ fn snapshot_heatmap_with_coords() {
     let mut buf = Buffer::empty(area);
     panel.render(area, &mut buf);
     insta::assert_snapshot!("heatmap_with_coords", buffer_to_string(&buf));
+}
+
+// ---------------------------------------------------------------------------
+// Line Plot Snapshots
+// ---------------------------------------------------------------------------
+
+#[test]
+fn snapshot_line_plot_basic() {
+    let data: Vec<f64> = (0..40).map(|i| (i as f64 * 0.3).sin() * 10.0).collect();
+    let plot = LinePlotPanel::new(&data, "signal", "time", None);
+    let area = Rect::new(0, 0, 60, 16);
+    let mut buf = Buffer::empty(area);
+    plot.render(area, &mut buf);
+    insta::assert_snapshot!("line_plot_basic", buffer_to_string(&buf));
+}
+
+#[test]
+fn snapshot_line_plot_with_coords() {
+    let data = vec![0.0, 5.0, 10.0, 8.0, 3.0, 1.0];
+    let coords = vec![-90.0, -54.0, -18.0, 18.0, 54.0, 90.0];
+    let plot = LinePlotPanel::new(&data, "profile", "lat", Some(&coords));
+    let area = Rect::new(0, 0, 50, 14);
+    let mut buf = Buffer::empty(area);
+    plot.render(area, &mut buf);
+    insta::assert_snapshot!("line_plot_with_coords", buffer_to_string(&buf));
+}
+
+#[test]
+fn snapshot_line_plot_with_nan() {
+    let data = vec![1.0, 2.0, f64::NAN, 4.0, 5.0, f64::NAN, 3.0];
+    let plot = LinePlotPanel::new(&data, "sparse", "x", None);
+    let area = Rect::new(0, 0, 50, 12);
+    let mut buf = Buffer::empty(area);
+    plot.render(area, &mut buf);
+    insta::assert_snapshot!("line_plot_with_nan", buffer_to_string(&buf));
 }
 
 // ---------------------------------------------------------------------------

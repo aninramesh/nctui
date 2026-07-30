@@ -6,6 +6,7 @@ Terminal UI viewer for NetCDF4 / HDF5 datasets, built with Rust and [ratatui](ht
 
 - **Interactive TUI** -- full terminal application with keyboard navigation, modal overlays, and a composable panel layout
 - **Tree navigator** -- browse groups and variables with expand/collapse; coordinate variables are auto-detected and marked
+- **1D line plot** -- braille-resolution line chart for 1D variables with coordinate-aware X-axis when available
 - **2D heatmap** -- color-mapped visualization using Unicode block characters (░▒▓█) with a blue-to-red palette and automatic downsampling
 - **Coordinate-aware axes** -- plots display real coordinate values (e.g. latitude/longitude) when coordinate variables are available, instead of raw indices
 - **Stats panel** -- summary statistics including count, min/max, mean, median, standard deviation, percentiles (p5/p25/p75/p95), NaN/Inf counts, and valid-data fraction
@@ -97,14 +98,15 @@ nctui <file.nc>
 ```
 
 Opens an interactive terminal UI with the dataset's variables displayed in a
-tree on the left and a heatmap/stats panel on the right.
+tree on the left and a plot/stats panel on the right. Selecting a **1D**
+variable shows a line plot; selecting a **2D** variable shows a heatmap.
 
 ### Keybindings
 
 | Key | Action |
 |-----|--------|
 | `j` / `k` or `↑` / `↓` | Navigate the variable tree |
-| `Enter` / `Space` | Select variable (load heatmap + stats) or expand/collapse group |
+| `Enter` / `Space` | Select variable (load plot + stats) or expand/collapse group |
 | `g` / `G` | Jump to top / bottom of tree |
 | `/` | Open fuzzy search bar |
 | `Esc` | Close modal / cancel search / clear filter |

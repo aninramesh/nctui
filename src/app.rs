@@ -1,13 +1,14 @@
 //! Application state for the interactive TUI.
 //!
-//! `App` composes every widget (tree, heatmap, stats, histogram, table,
-//! search, slice picker) into a single struct and routes keyboard events
-//! to the currently focused component.
+//! `App` composes every widget (tree, heatmap, line plot, stats, histogram,
+//! table, search, slice picker) into a single struct and routes keyboard
+//! events to the currently focused component.
 
 use indexmap::IndexMap;
 
 use crate::heatmap::HeatmapPanel;
 use crate::histogram::HistogramState;
+use crate::line_plot::LinePlotPanel;
 use crate::search::{SearchState, VarInfo};
 use crate::slice_picker::{DimRole, SlicePicker, SliceSpec};
 use crate::stats::StatsPanel;
@@ -36,6 +37,8 @@ pub struct App {
     // -- widgets --
     pub tree: TreeNavigator,
     pub heatmap: Option<HeatmapPanel>,
+    /// Primary view for 1D variables (mutually exclusive with heatmap).
+    pub line_plot: Option<LinePlotPanel>,
     pub stats: StatsPanel,
     pub histogram: HistogramState,
     pub table: Option<TablePreview>,
@@ -91,6 +94,7 @@ impl App {
         Self {
             tree,
             heatmap: None,
+            line_plot: None,
             stats: StatsPanel::new(),
             histogram: HistogramState::new(),
             table: None,
@@ -110,8 +114,8 @@ impl App {
 
     /// Load data for the currently selected variable in the tree.
     ///
-    /// For 2D variables, loads into heatmap + stats. For 1D, loads stats
-    /// only. For nD (>2) variables, opens the slice picker.
+    /// For 2D variables, loads into heatmap + stats. For 1D, loads a line
+    /// plot + stats. For nD (>2) variables, opens the slice picker.
     pub fn load_selected_variable(
         &mut self,
         file: &netcdf::File,
@@ -171,18 +175,19 @@ impl App {
         if ndim == 0 {
             // Scalar
             self.heatmap = None;
+            self.line_plot = None;
             self.table = None;
             self.status_msg = format!("{var_name}: scalar value");
         } else if ndim == 1 {
-            // 1D variable: show as single-row heatmap + prepare table
+            // 1D variable: line plot is the primary view
             let dim = &meta.dim_names[0];
             let coords = crate::backend::read_coord_var(file, dim, info);
-            let hm_data = vec![data.clone()];
-            self.heatmap = Some(HeatmapPanel::with_coords(
-                hm_data,
+            self.heatmap = None;
+            self.line_plot = Some(LinePlotPanel::new(
+                &data,
                 var_name,
-                None,
-                coords.clone(),
+                dim,
+                coords.as_deref(),
             ));
             self.table = Some(TablePreview::from_1d(
                 &data,
@@ -206,6 +211,7 @@ impl App {
             let row_coords = crate::backend::read_coord_var(file, row_dim, info);
             let col_coords = crate::backend::read_coord_var(file, col_dim, info);
 
+            self.line_plot = None;
             self.heatmap = Some(HeatmapPanel::with_coords(
                 data_2d.clone(),
                 var_name,
@@ -317,6 +323,7 @@ impl App {
         self.current_data = flat_data.clone();
         self.stats.set_data(var_name, &flat_data);
         self.histogram.set_data(&flat_data);
+        self.line_plot = None;
         self.heatmap = Some(HeatmapPanel::with_coords(
             data_2d.clone(),
             var_name,

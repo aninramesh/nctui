@@ -1,7 +1,7 @@
 //! Layout and rendering for the interactive TUI.
 //!
-//! Composes the tree, heatmap, stats, search bar, and modal overlays into
-//! a single terminal frame.
+//! Composes the tree, heatmap/line plot, stats, search bar, and modal
+//! overlays into a single terminal frame.
 
 use ratatui::{
     buffer::Buffer,
@@ -51,16 +51,16 @@ pub fn draw(app: &App, area: Rect, buf: &mut Buffer) {
     draw_search_bar(app, left_col[0], buf);
     draw_tree(app, left_col[1], buf);
 
-    // Right side: vertical split [heatmap | stats]
+    // Right side: vertical split [plot (heatmap or line) | stats]
     let right_col = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Percentage(65), // heatmap
+            Constraint::Percentage(65), // plot panel
             Constraint::Min(6),         // stats
         ])
         .split(right_area);
 
-    draw_heatmap(app, right_col[0], buf);
+    draw_plot_panel(app, right_col[0], buf);
     draw_stats(app, right_col[1], buf);
 
     // Status bar
@@ -168,24 +168,28 @@ fn render_tree_rows(tree: &crate::tree::TreeNavigator, area: Rect, buf: &mut Buf
     }
 }
 
-fn draw_heatmap(app: &App, area: Rect, buf: &mut Buffer) {
-    match &app.heatmap {
-        Some(hm) => hm.render(area, buf),
-        None => {
-            let block = Block::default()
-                .title(" Heatmap ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Gray));
-            let inner = block.inner(area);
-            Widget::render(block, area, buf);
-            if inner.width >= 20 && inner.height >= 1 {
-                let msg = Line::from(Span::styled(
-                    "Select a variable to visualize",
-                    Style::default().fg(Color::DarkGray),
-                ));
-                Widget::render(msg, inner, buf);
-            }
-        }
+/// Draw the primary visualization panel: line plot for 1D, heatmap for 2D.
+fn draw_plot_panel(app: &App, area: Rect, buf: &mut Buffer) {
+    if let Some(ref plot) = app.line_plot {
+        plot.render(area, buf);
+        return;
+    }
+    if let Some(ref hm) = app.heatmap {
+        hm.render(area, buf);
+        return;
+    }
+    let block = Block::default()
+        .title(" Plot ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Gray));
+    let inner = block.inner(area);
+    Widget::render(block, area, buf);
+    if inner.width >= 20 && inner.height >= 1 {
+        let msg = Line::from(Span::styled(
+            "Select a variable to visualize",
+            Style::default().fg(Color::DarkGray),
+        ));
+        Widget::render(msg, inner, buf);
     }
 }
 
@@ -253,6 +257,8 @@ fn draw_help_modal(area: Rect, buf: &mut Buffer) {
         ("?", "Toggle this help"),
         ("q", "Quit"),
         ("", ""),
+        ("1D vars:", "shown as line plot"),
+        ("2D vars:", "shown as heatmap"),
         ("In histogram:", "+/- adjust bins"),
         ("In table:", "\u{2191}\u{2193}\u{2190}\u{2192} scroll"),
         ("In slicer:", "x/y/f role, h/l idx"),

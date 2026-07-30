@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.9.0
+
+### New features
+
+- **1D line plot** — selecting a 1D variable now shows a braille-resolution
+  line chart in the main plot panel (instead of a single-row heatmap). The
+  X-axis uses coordinate values when a matching coordinate variable is
+  available, otherwise 0-based indices. Y-axis labels show min / mid / max.
+  Non-finite values (NaN/Inf) are skipped so gaps do not break the axis scale.
+
+### Architecture
+
+- `src/line_plot.rs` — new `LinePlotPanel` widget built on ratatui `Chart`
+  with `GraphType::Line` and braille markers.
+- `App` holds `line_plot: Option<LinePlotPanel>` mutually exclusive with
+  the 2D `heatmap`. The UI plot panel prefers the line plot when present.
+- Help overlay notes that 1D vars use the line plot and 2D vars the heatmap.
+
+### Tests
+
+- Unit tests for range calculation, coordinate handling, NaN skipping,
+  degenerate flat series, and render smoke tests.
+- Snapshot tests for basic, coordinate-aware, and sparse (NaN) line plots.
+
 ## v0.8.0
 
 ### New features

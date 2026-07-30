@@ -1,5 +1,6 @@
 pub mod heatmap;
 pub mod histogram;
+pub mod line_plot;
 pub mod search;
 pub mod slice_picker;
 pub mod stats;
